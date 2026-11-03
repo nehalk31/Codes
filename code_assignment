@@ -1,0 +1,398 @@
+#include <iostream>
+#include <iomanip>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <memory>
+#include <string>
+#include <limits>
+#include <stdexcept>
+ 
+using namespace std;
+ 
+// Abstract interface for crop-specific farming recommendations.
+class Advisory {
+public:
+    virtual void giveAdvice() const = 0;
+    virtual ~Advisory() = default;
+};
+ 
+class Crop {
+protected:
+    string name;
+    double area;              // in acres
+    string season;
+    double yieldPerAcre;      // in tonnes per acre
+ 
+    static int cropCount;
+ 
+public:
+    // Overloaded constructors
+    Crop(const string& n, double a, const string& s, double y)
+        : name(n), area(a), season(s), yieldPerAcre(y) {
+        if (a <= 0 || y <= 0)
+            throw invalid_argument("Area and yield per acre must be positive.");
+        ++cropCount;
+    }
+ 
+    Crop(const string& n, double a, const string& s)
+        : Crop(n, a, s, 1.0) { }
+ 
+    virtual ~Crop() = default;
+ 
+    virtual double calculateYield() const {
+        return area * yieldPerAcre;
+    }
+ 
+    virtual void display() const {
+        cout << left << setw(18) << name
+             << setw(12) << season
+             << right << setw(10) << area
+             << setw(16) << yieldPerAcre
+             << setw(16) << calculateYield() << '\n';
+    }
+ 
+    // Compare crops by total calculated yield.
+    bool operator<(const Crop& other) const {
+        return calculateYield() < other.calculateYield();
+    }
+ 
+    static int getCropCount() {
+        return cropCount;
+    }
+ 
+    // Read-only accessors used for saving records.
+    string getName() const { return name; }
+    double getArea() const { return area; }
+    string getSeason() const { return season; }
+    double getYieldPerAcre() const { return yieldPerAcre; }
+ 
+    virtual string getType() const = 0;
+    virtual string getExtra1() const = 0;
+    virtual string getExtra2() const = 0;
+};
+ 
+int Crop::cropCount = 0;
+ 
+class CerealCrop : public Crop, public Advisory {
+private:
+    string fertilizerType;
+    int irrigationFrequency; // times per week
+ 
+public:
+    CerealCrop(const string& n, double a, const string& s, double y,
+               const string& fertilizer, int irrigation)
+        : Crop(n, a, s, y),
+          fertilizerType(fertilizer), irrigationFrequency(irrigation) {
+        if (irrigation < 0)
+            throw invalid_argument("Irrigation frequency cannot be negative.");
+    }
+ 
+    // Overloaded constructor
+    CerealCrop(const string& n, double a, const string& s,
+               const string& fertilizer, int irrigation)
+        : CerealCrop(n, a, s, 1.0, fertilizer, irrigation) { }
+ 
+    void display() const override {
+        Crop::display();
+        cout << "  Type: Cereal | Fertilizer: " << fertilizerType
+             << " | Irrigation: " << irrigationFrequency
+             << " time(s)/week\n";
+    }
+ 
+    void giveAdvice() const override {
+        cout << "Advice for " << name
+             << ": monitor soil moisture, use balanced fertilizer, "
+                "and irrigate according to the crop's growth stage.\n";
+    }
+ 
+    string getType() const override { return "CEREAL"; }
+    string getExtra1() const override { return fertilizerType; }
+    string getExtra2() const override { return to_string(irrigationFrequency); }
+};
+ 
+class VegetableCrop : public Crop, public Advisory {
+private:
+    string fertilizerType;
+    int irrigationFrequency; // times per week
+ 
+public:
+    VegetableCrop(const string& n, double a, const string& s, double y,
+                  const string& fertilizer, int irrigation)
+        : Crop(n, a, s, y),
+          fertilizerType(fertilizer), irrigationFrequency(irrigation) {
+        if (irrigation < 0)
+            throw invalid_argument("Irrigation frequency cannot be negative.");
+    }
+ 
+    // Overloaded constructor
+    VegetableCrop(const string& n, double a, const string& s,
+                  const string& fertilizer, int irrigation)
+        : VegetableCrop(n, a, s, 1.0, fertilizer, irrigation) { }
+ 
+    void display() const override {
+        Crop::display();
+        cout << "  Type: Vegetable | Fertilizer: " << fertilizerType
+             << " | Irrigation: " << irrigationFrequency
+             << " time(s)/week\n";
+    }
+ 
+    void giveAdvice() const override {
+        cout << "Advice for " << name
+             << ": check plants regularly for pests, maintain even soil "
+                "moisture, and harvest vegetables at the right maturity.\n";
+    }
+ 
+    string getType() const override { return "VEGETABLE"; }
+    string getExtra1() const override { return fertilizerType; }
+    string getExtra2() const override { return to_string(irrigationFrequency); }
+};
+ 
+// Input helpers: clear invalid input and reject non-positive values.
+double readPositiveDouble(const string& prompt) {
+    double value;
+    while (true) {
+        cout << prompt;
+        if (cin >> value && value > 0) {
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            return value;
+        }
+        cout << "Invalid input. Enter a number greater than zero.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+}
+ 
+int readNonNegativeInt(const string& prompt) {
+    int value;
+    while (true) {
+        cout << prompt;
+        if (cin >> value && value >= 0) {
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            return value;
+        }
+        cout << "Invalid input. Enter zero or a positive whole number.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+}
+ 
+string readText(const string& prompt) {
+    string value;
+    while (true) {
+        cout << prompt;
+        getline(cin, value);
+        if (!value.empty() && value.find('|') == string::npos)
+            return value;
+        cout << "Please enter a non-empty value without the | character.\n";
+    }
+}
+ 
+void addCrop(vector<unique_ptr<Crop>>& crops) {
+    cout << "\n1. Cereal crop\n2. Vegetable crop\nChoose type: ";
+    int type;
+    if (!(cin >> type) || (type != 1 && type != 2)) {
+        cout << "Invalid crop type.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        return;
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+ 
+    string name = readText("Crop name: ");
+    double area = readPositiveDouble("Cultivated area (acres): ");
+    string season = readText("Season: ");
+    double yield = readPositiveDouble("Expected yield per acre (tonnes): ");
+    string fertilizer = readText("Fertilizer type: ");
+    int irrigation = readNonNegativeInt("Irrigation frequency (times/week): ");
+ 
+    try {
+        if (type == 1)
+            crops.push_back(make_unique<CerealCrop>(
+                name, area, season, yield, fertilizer, irrigation));
+        else
+            crops.push_back(make_unique<VegetableCrop>(
+                name, area, season, yield, fertilizer, irrigation));
+        cout << "Crop added successfully.\n";
+    } catch (const exception& e) {
+        cout << "Could not add crop: " << e.what() << '\n';
+    }
+}
+ 
+void displayCrops(const vector<unique_ptr<Crop>>& crops) {
+    if (crops.empty()) {
+        cout << "No crop records available.\n";
+        return;
+    }
+    cout << "\n" << left << setw(18) << "Crop"
+         << setw(12) << "Season" << right
+         << setw(10) << "Area" << setw(16) << "Yield/acre"
+         << setw(16) << "Total yield" << '\n';
+    cout << string(72, '-') << '\n';
+ 
+    double total = 0;
+    for (const auto& crop : crops) {
+        crop->display();               // runtime polymorphism
+        total += crop->calculateYield();
+    }
+    cout << "\nCombined expected yield: " << fixed << setprecision(2)
+         << total << " tonnes\n";
+}
+ 
+void compareCrops(const vector<unique_ptr<Crop>>& crops) {
+    if (crops.size() < 2) {
+        cout << "Add at least two crops before comparing.\n";
+        return;
+    }
+    cout << "Enter the two crop numbers (1 to " << crops.size() << "): ";
+    size_t first, second;
+    if (!(cin >> first >> second) || first < 1 || second < 1 ||
+        first > crops.size() || second > crops.size() || first == second) {
+        cout << "Invalid crop numbers. Choose two different valid numbers.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        return;
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+ 
+    const Crop& a = *crops[first - 1];
+    const Crop& b = *crops[second - 1];
+ 
+    if (a < b)
+        cout << b.getName() << " has the higher expected yield ("
+             << b.calculateYield() << " tonnes).\n";
+    else if (b < a)
+        cout << a.getName() << " has the higher expected yield ("
+             << a.calculateYield() << " tonnes).\n";
+    else
+        cout << "Both crops have the same expected yield.\n";
+}
+ 
+void showAdvice(const vector<unique_ptr<Crop>>& crops) {
+    if (crops.empty()) {
+        cout << "No crop records available.\n";
+        return;
+    }
+    for (const auto& crop : crops) {
+        // Safe because both concrete crop classes implement Advisory.
+        const Advisory* advice = dynamic_cast<const Advisory*>(crop.get());
+        if (advice)
+            advice->giveAdvice();
+    }
+}
+ 
+void saveToFile(const vector<unique_ptr<Crop>>& crops) {
+    ofstream out("smart_farm_data.txt");
+    if (!out) {
+        cout << "Error: could not open file for writing.\n";
+        return;
+    }
+ 
+    // Pipe-separated fields: type|name|area|season|yieldPerAcre|fertilizer|irrigation
+    for (const auto& crop : crops) {
+        out << crop->getType() << '|'
+            << crop->getName() << '|'
+            << crop->getArea() << '|'
+            << crop->getSeason() << '|'
+            << crop->getYieldPerAcre() << '|'
+            << crop->getExtra1() << '|'
+            << crop->getExtra2() << '\n';
+    }
+    cout << "Crop data saved to smart_farm_data.txt.\n";
+}
+ 
+void loadFromFile(vector<unique_ptr<Crop>>& crops) {
+    ifstream in("smart_farm_data.txt");
+    if (!in) {
+        cout << "No saved file found. Save crop data first.\n";
+        return;
+    }
+ 
+    vector<unique_ptr<Crop>> loaded;
+    string line;
+    int lineNumber = 0;
+    while (getline(in, line)) {
+        ++lineNumber;
+        try {
+            stringstream ss(line);
+            string type, name, areaText, season, yieldText, fertilizer, irrigationText;
+            if (!getline(ss, type, '|') ||
+                !getline(ss, name, '|') ||
+                !getline(ss, areaText, '|') ||
+                !getline(ss, season, '|') ||
+                !getline(ss, yieldText, '|') ||
+                !getline(ss, fertilizer, '|') ||
+                !getline(ss, irrigationText))
+                throw runtime_error("incomplete record");
+ 
+            double area = stod(areaText);
+            double yield = stod(yieldText);
+            int irrigation = stoi(irrigationText);
+ 
+            if (type == "CEREAL")
+                loaded.push_back(make_unique<CerealCrop>(
+                    name, area, season, yield, fertilizer, irrigation));
+            else if (type == "VEGETABLE")
+                loaded.push_back(make_unique<VegetableCrop>(
+                    name, area, season, yield, fertilizer, irrigation));
+            else
+                throw runtime_error("unknown crop type");
+        } catch (const exception& e) {
+            cout << "Skipping invalid line " << lineNumber
+                 << ": " << e.what() << '\n';
+        }
+    }
+ 
+    crops = move(loaded);
+    cout << crops.size() << " crop record(s) loaded.\n";
+}
+ 
+int main() {
+    vector<unique_ptr<Crop>> crops;
+    int choice;
+ 
+    do {
+        cout << "\n========== SMART FARM MANAGEMENT SYSTEM ==========\n"
+             << "1. Add a crop\n"
+             << "2. Display crops and total yield\n"
+             << "3. Compare two crops by yield\n"
+             << "4. Display farming advice\n"
+             << "5. Save crop data to file\n"
+             << "6. Load crop data from file\n"
+             << "7. Show crop object count\n"
+             << "0. Exit\n"
+             << "Enter choice: ";
+ 
+        if (!(cin >> choice)) {
+            cout << "Invalid menu input. Enter a whole number.\n";
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            continue;
+        }
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+ 
+        try {
+            switch (choice) {
+                case 1: addCrop(crops); break;
+                case 2: displayCrops(crops); break;
+                case 3: compareCrops(crops); break;
+                case 4: showAdvice(crops); break;
+                case 5: saveToFile(crops); break;
+                case 6: loadFromFile(crops); break;
+                case 7:
+                    cout << "Crop objects constructed so far: "
+                         << Crop::getCropCount() << '\n';
+                    break;
+                case 0:
+                    cout << "Exiting Smart Farm Management System.\n";
+                    break;
+                default:
+                    cout << "Please choose a number from 0 to 7.\n";
+            }
+        } catch (const exception& e) {
+            cout << "Error: " << e.what() << '\n';
+        }
+    } while (choice != 0);
+ 
+    return 0;
+}
