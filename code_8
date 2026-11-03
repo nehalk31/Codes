@@ -1,0 +1,60 @@
+#include <iostream>
+#include <string>
+using namespace std;
+class Student {
+protected:
+int rollNo;
+string name;
+public:
+void getStudentDetails() {
+cout << "Enter roll number: ";
+cin >> rollNo;
+cin.ignore();
+cout << "Enter name: ";
+getline(cin, name);
+}
+void displayStudentDetails() const {
+cout << "Roll number: " << rollNo << endl;
+cout << "Name: " << name << endl;
+}
+};
+class Exam : public Student {
+protected:
+float marks[6];
+public:
+void getMarks() {
+for (int i = 0; i < 6; i++) {
+cout << "Enter marks for subject " << i + 1 << ": ";
+cin >> marks[i];
+}
+}
+void displayMarks() const {
+for (int i = 0; i < 6; i++) {
+cout << "Subject " << i + 1 << ": " << marks[i] << endl;
+}
+}
+};
+class Result : public Exam {
+float totalMarks = 0;
+public:
+void calculateResult() {
+totalMarks = 0;
+for (int i = 0; i < 6; i++) {
+totalMarks += marks[i];
+}
+}
+void displayResult() const {
+displayStudentDetails();
+displayMarks();
+cout << "Total marks: " << totalMarks << " / 600" << endl;
+}
+};
+int main() {
+Result r;
+r.getStudentDetails();
+r.getMarks();
+r.calculateResult();
+cout << "\nStudent Result\n";
+r.displayResult();
+return 0;
+}
